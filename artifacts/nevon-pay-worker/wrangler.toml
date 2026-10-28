@@ -1,0 +1,24 @@
+name = "nevon-pay-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APP_ENV = "sandbox"
+DEFAULT_CURRENCY = "MZN"
+SUPPORTED_CURRENCIES = "MZN,USD,EUR,ZAR"
+CORS_ORIGINS = "http://localhost:3000"
+RATE_LIMIT_MAX_REQUESTS = "100"
+RATE_LIMIT_WINDOW_SECONDS = "60"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nevon-pay-db"
+database_id = "72f35722-5ec0-44d5-a3a4-7eb34f3065ee"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "2ea1e49457ba4f43bb55b5b3df658084"
+
+# Segredos (wrangler secret put): ADMIN_TOKEN
