@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  MERCHANT
+  ADMIN
+}
+
+enum MerchantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  OPEN
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum Environment {
+  TEST
+  LIVE
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  merchants MerchantUser[]
+}
+
+model Merchant {
+  id          String         @id @default(cuid())
+  name        String
+  email       String
+  status      MerchantStatus @default(PENDING)
+  apiKeys     ApiKey[]
+  wallets     Wallet[]
+  sessions    CheckoutSession[]
+  payments    Payment[]
+  users       MerchantUser[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model MerchantUser {
+  id         String   @id @default(cuid())
+  userId     String
+  merchantId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  @@unique([userId, merchantId])
+}
+
+model ApiKey {
+  id         String      @id @default(cuid())
+  merchantId String
+  name       String
+  keyHash    String
+  environment Environment @default(TEST)
+  active     Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  merchant   Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  merchantId String
+  currency   String
+  balance    Decimal  @default(0) @db.Decimal(20, 4)
+  pending    Decimal  @default(0) @db.Decimal(20, 4)
+  held       Decimal  @default(0) @db.Decimal(20, 4)
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  entries    LedgerEntry[]
+  @@unique([merchantId, currency])
+}
+
+model LedgerEntry {
+  id          String           @id @default(cuid())
+  walletId    String
+  type        LedgerEntryType
+  amount      Decimal          @db.Decimal(20, 4)
+  currency    String
+  reference   String
+  description String?
+  createdAt   DateTime         @default(now())
+  wallet      Wallet           @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  @@index([reference])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  merchantId      String
+  amount          Decimal       @db.Decimal(20, 4)
+  currency        String
+  status          PaymentStatus @default(PENDING)
+  reference       String        @unique
+  provider        String?
+  providerRef     String?
+  idempotencyKey  String?
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  merchant        Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  session         CheckoutSession?
+  @@index([merchantId, status])
+  @@unique([merchantId, idempotencyKey])
+}
+
+model CheckoutSession {
+  id          String        @id @default(cuid())
+  merchantId  String
+  paymentId   String        @unique
+  amount      Decimal       @db.Decimal(20, 4)
+  currency    String
+  status      PaymentStatus @default(OPEN)
+  customer    Json?
+  metadata    Json?
+  successUrl  String?
+  cancelUrl   String?
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+  merchant    Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  payment     Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  @@index([merchantId, status])
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  merchantId  String
+  event       String
+  payload     Json
+  delivered   Boolean  @default(false)
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now())
+  deliveredAt DateTime?
+  @@index([merchantId, event])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  merchantId String?
+  action     String
+  resource   String?
+  resourceId String?
+  requestId  String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  @@index([merchantId, createdAt])
+}
