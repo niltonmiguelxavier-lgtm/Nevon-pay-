@@ -8,7 +8,9 @@
     "start": "next start --hostname 0.0.0.0 --port $PORT",
     "typecheck": "prisma generate && tsc --noEmit",
     "db:push": "prisma db push",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:status": "prisma migrate status"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
