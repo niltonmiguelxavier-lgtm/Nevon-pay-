@@ -1,19 +1,35 @@
-import { databaseProvider, db } from "@/lib/db";
 import { json, requestId } from "@/lib/http";
+import { checkDatabase, databaseProvider, databaseTarget, databaseWarning } from "@/lib/db";
+import { getAppEnv, getEmailConfig, getSupabaseConfig } from "@/lib/env";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const id = requestId(req);
-  try {
-    await db.$queryRaw`SELECT 1`;
-    return json({
-      success: true,
+  const status = await checkDatabase();
+  const supabase = getSupabaseConfig();
+  const email = getEmailConfig();
+
+  const healthy = status.database === "healthy" && status.schema === "ready";
+
+  const response = json(
+    {
+      success: healthy,
       application: "healthy",
-      database: "healthy",
+      database: status.database,
+      database_schema: status.schema,
       database_provider: databaseProvider,
-      supabase_auth_configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
-      environment: process.env.APP_ENV || "development"
-    }, 200, id);
-  } catch {
-    return json({ success: false, application: "healthy", database: "unavailable" }, 503, id);
-  }
+      database_target: databaseTarget,
+      env_warning: databaseWarning,
+      supabase_auth_configured: Boolean(supabase),
+      email_configured: email.enabled,
+      email_provider: email.enabled ? email.provider : null,
+      email_status: email.enabled ? "configured" : email.reason,
+      environment: getAppEnv(),
+    },
+    healthy ? 200 : 503,
+    id
+  );
+
+  return response;
 }

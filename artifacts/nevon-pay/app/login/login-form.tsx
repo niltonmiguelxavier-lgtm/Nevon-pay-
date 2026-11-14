@@ -4,26 +4,39 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { getSupabaseConfig } from "@/lib/supabase/config";
+import { authErrorMessage } from "@/lib/auth/errors";
 
 function getAppPath(path: string) {
   const pathname = window.location.pathname;
   const loginSuffix = "/login";
-  const basePath = pathname.endsWith(loginSuffix)
-    ? pathname.slice(0, -loginSuffix.length)
-    : "";
+  const basePath = pathname.endsWith(loginSuffix) ? pathname.slice(0, -loginSuffix.length) : "";
   return `${basePath}${path}`;
 }
 
-export default function LoginForm() {
+type Props = {
+  configured: boolean;
+  initialEmail?: string;
+  initialError?: string;
+  initialMessage?: string;
+};
+
+export default function LoginForm({ configured, initialEmail = "", initialError = "", initialMessage = "" }: Props) {
   const router = useRouter();
-  const configured = Boolean(getSupabaseConfig());
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [message, setMessage] = useState(initialMessage);
+  const [error, setError] = useState(initialError);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [resending, setResending] = useState(false);
+
+  function reset() {
+    setError("");
+    setMessage("");
+    setPendingEmail("");
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -38,9 +51,18 @@ export default function LoginForm() {
     setBusy(true);
     try {
       const supabase = createClient();
+
       if (mode === "login") {
-        const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-        if (authError) throw authError;
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+        if (authError) {
+          if (authError.code === "email_not_confirmed" || /email not confirmed/i.test(authError.message)) {
+            setPendingEmail(email.trim().toLowerCase());
+          }
+          throw authError;
+        }
         router.replace(getAppPath("/dashboard"));
         router.refresh();
         return;
@@ -48,24 +70,50 @@ export default function LoginForm() {
 
       const callbackPath = getAppPath("/auth/callback");
       const { data, error: authError } = await supabase.auth.signUp({
-        email,
+        email: email.trim().toLowerCase(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}${callbackPath}`
-        }
+          emailRedirectTo: `${window.location.origin}${callbackPath}`,
+          data: name.trim() ? { full_name: name.trim() } : undefined,
+        },
       });
       if (authError) throw authError;
 
       if (data.session) {
         router.replace(getAppPath("/dashboard"));
         router.refresh();
-      } else {
-        setMessage("Conta criada. Confirme o endereço de email para concluir o registo.");
+        return;
       }
+
+      setPendingEmail(email.trim().toLowerCase());
+      setMessage(
+        "Conta criada. Enviámos um email de confirmação — abra o link para activar a conta e só depois inicie sessão."
+      );
+      setPassword("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível concluir o pedido.");
+      setError(authErrorMessage(caught as { message?: string; code?: string }));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function resendConfirmation() {
+    if (!pendingEmail) return;
+    setResending(true);
+    setError("");
+    setMessage("");
+    try {
+      const { error: authError } = await createClient().auth.resend({
+        type: "signup",
+        email: pendingEmail,
+        options: { emailRedirectTo: `${window.location.origin}${getAppPath("/auth/callback")}` },
+      });
+      if (authError) throw authError;
+      setMessage("Email de confirmação reenviado. Verifique a caixa de entrada e a pasta de spam.");
+    } catch (caught) {
+      setError(authErrorMessage(caught as { message?: string; code?: string }));
+    } finally {
+      setResending(false);
     }
   }
 
@@ -82,16 +130,32 @@ export default function LoginForm() {
         <p className="auth-description">
           {mode === "login"
             ? "Entre na sua conta para aceder ao dashboard."
-            : "Registe-se com email e palavra-passe para começar."}
+            : "Registe-se com email e palavra-passe. Vai receber um email para confirmar a conta."}
         </p>
 
         {!configured ? (
           <div className="auth-alert" role="status">
-            O Supabase ainda não está configurado neste ambiente. A autenticação ficará disponível
-            depois de ligar o projecto Supabase.
+            O Supabase ainda não está configurado neste ambiente. A autenticação ficará disponível depois de
+            definir NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.
           </div>
         ) : (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
+            {mode === "signup" && (
+              <>
+                <label className="auth-label" htmlFor="name">Nome (opcional)</label>
+                <input
+                  className="auth-input"
+                  id="name"
+                  name="name"
+                  type="text"
+                  autoComplete="name"
+                  maxLength={120}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </>
+            )}
+
             <label className="auth-label" htmlFor="email">Email</label>
             <input
               className="auth-input"
@@ -116,9 +180,21 @@ export default function LoginForm() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
+            {mode === "signup" && (
+              <p className="auth-description" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                Mínimo de 8 caracteres.
+              </p>
+            )}
 
             {error && <p className="auth-error" role="alert">{error}</p>}
             {message && <p className="auth-success" role="status">{message}</p>}
+
+            {pendingEmail && (
+              <button className="auth-secondary" type="button" onClick={resendConfirmation} disabled={resending}
+                style={{ marginTop: 12, width: "100%" }}>
+                {resending ? "A reenviar..." : "Reenviar email de confirmação"}
+              </button>
+            )}
 
             <button className="auth-submit" type="submit" disabled={busy}>
               {busy ? "A processar..." : mode === "login" ? "Entrar" : "Criar conta"}
@@ -127,20 +203,26 @@ export default function LoginForm() {
         )}
 
         {configured && (
-          <p className="auth-switch">
-            {mode === "login" ? "Ainda não tem conta?" : "Já tem conta?"}{" "}
-            <button
-              className="auth-switch-button"
-              type="button"
-              onClick={() => {
-                setMode(mode === "login" ? "signup" : "login");
-                setError("");
-                setMessage("");
-              }}
-            >
-              {mode === "login" ? "Criar conta" : "Entrar"}
-            </button>
-          </p>
+          <>
+            {mode === "login" && (
+              <p className="auth-switch" style={{ marginBottom: 0 }}>
+                <Link className="auth-switch-button" href="/auth/recuperar">Esqueceu-se da palavra-passe?</Link>
+              </p>
+            )}
+            <p className="auth-switch">
+              {mode === "login" ? "Ainda não tem conta?" : "Já tem conta?"}{" "}
+              <button
+                className="auth-switch-button"
+                type="button"
+                onClick={() => {
+                  setMode(mode === "login" ? "signup" : "login");
+                  reset();
+                }}
+              >
+                {mode === "login" ? "Criar conta" : "Entrar"}
+              </button>
+            </p>
+          </>
         )}
 
         <Link className="auth-back" href="/">Voltar ao Nevon Pay</Link>

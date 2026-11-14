@@ -2,7 +2,10 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { json, requestId } from "@/lib/http";
 import { createClient } from "@/lib/supabase/server";
-import { getSupabaseConfig } from "@/lib/supabase/config";
+import { getEmailConfig, getSupabaseConfig } from "@/lib/env";
+import { syncSupabaseUser } from "@/lib/auth/sync-user";
+import { countUnread, listNotifications } from "@/lib/notifications";
+import { expireStaleSessions } from "@/lib/payments";
 import type {
   DashboardChartPoint,
   DashboardCustomer,
@@ -93,6 +96,22 @@ export async function GET(req: Request) {
       }, 401, id);
     }
 
+    try {
+      await syncSupabaseUser(user);
+    } catch (syncError) {
+      const code = (syncError as { code?: string }).code;
+      return json({
+        success: false,
+        error: {
+          code: code === "EMAIL_IN_USE" ? "PROFILE_CONFLICT" : "PROFILE_SYNC_FAILED",
+          message: code === "EMAIL_IN_USE"
+            ? "Existe já um perfil com este email mas com outro identificador. Contacte o suporte para reconciliar a conta."
+            : "A conta está autenticada mas o perfil não pôde ser sincronizado com a base de dados.",
+          details: syncError instanceof Error ? syncError.message : undefined,
+        },
+      }, code === "EMAIL_IN_USE" ? 409 : 503, id);
+    }
+
     const links = await db.merchantUser.findMany({
       where: { userId: user.id },
       select: {
@@ -106,6 +125,11 @@ export async function GET(req: Request) {
       .filter((merchant, index, all) => all.findIndex((item) => item.id === merchant.id) === index);
     const merchantIds = workspaces.map(({ id: merchantId }) => merchantId);
     const now = new Date();
+
+    // Sessões vencidas passam a EXPIRED também fora do endpoint de checkout.
+    if (merchantIds.length > 0) {
+      await expireStaleSessions(merchantIds);
+    }
 
     const basePayload: DashboardPayload = {
       user: {
@@ -130,6 +154,10 @@ export async function GET(req: Request) {
       customers: [],
       methods: [],
       notifications: [],
+      notificationsUnread: 0,
+      emailNotifications: getEmailConfig().enabled
+        ? { configured: true, status: "Provedor de email activo" }
+        : { configured: false, status: (getEmailConfig() as { reason?: string }).reason ?? "Não configurado" },
       updatedAt: now.toISOString(),
     };
 
@@ -284,16 +312,22 @@ export async function GET(req: Request) {
       methodMap.set(key, current);
     }
 
-    const notifications: DashboardNotification[] = transactions
-      .filter((payment) => ["FAILED", "PENDING", "PROCESSING"].includes(payment.status))
-      .slice(0, 6)
-      .map((payment) => ({
-        id: payment.id,
-        title: payment.status === "FAILED" ? "Pagamento falhado" : "Pagamento por acompanhar",
-        description: `${payment.reference} · ${payment.amount} ${payment.currency}`,
-        createdAt: payment.createdAt,
-        severity: "attention",
-      }));
+    // Notificações persistidas (tabela Notification). Antes eram derivadas dos
+    // últimos pagamentos, não podiam ser marcadas como lidas e desapareciam
+    // quando o pagamento saía da janela das 50 linhas mais recentes.
+    const [storedNotifications, unreadNotifications] = await Promise.all([
+      listNotifications(user.id, { limit: 20 }),
+      countUnread(user.id),
+    ]);
+
+    const notifications: DashboardNotification[] = storedNotifications.map((notification) => ({
+      id: notification.id,
+      title: notification.title,
+      description: notification.description,
+      createdAt: notification.createdAt.toISOString(),
+      severity: notification.severity === "critical" ? "critical" : notification.severity === "attention" ? "attention" : "info",
+      read: Boolean(notification.readAt),
+    }));
 
     const data: DashboardPayload = {
       ...basePayload,
@@ -313,6 +347,10 @@ export async function GET(req: Request) {
         received: method.received.toFixed(2),
       })),
       notifications,
+      notificationsUnread: unreadNotifications,
+      emailNotifications: getEmailConfig().enabled
+        ? { configured: true, status: `Provedor ${getEmailConfig().enabled ? (getEmailConfig() as { provider: string }).provider : ""} activo` }
+        : { configured: false, status: (getEmailConfig() as { reason?: string }).reason ?? "Não configurado" },
       updatedAt: new Date().toISOString(),
     };
 

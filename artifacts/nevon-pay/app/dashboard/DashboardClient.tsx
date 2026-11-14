@@ -18,6 +18,7 @@ import "./dashboard.css";
 type ViewKey = "overview" | "transactions" | "customers" | "methods" | "reports" | "integrations" | "settings" | "support";
 type ApiResponse = { success: true; data: DashboardPayload } | { success: false; error: { code: string; message: string } };
 type LoadState = "loading" | "ready" | "error";
+type ApiKeyRow = { id: string; name: string; environment: "TEST" | "LIVE"; active: boolean; createdAt: string };
 
 const navigation: Array<{ id: ViewKey; label: string; icon: typeof LayoutDashboard }> = [
   { id: "overview", label: "Visão Geral", icon: LayoutDashboard },
@@ -120,6 +121,19 @@ export default function DashboardClient() {
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>([]);
+  const [apiKeyName, setApiKeyName] = useState("");
+  const [apiKeySecret, setApiKeySecret] = useState<string | null>(null);
+  const [apiKeyBusy, setApiKeyBusy] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState("");
+  const [apiKeyNotice, setApiKeyNotice] = useState("");
   const hasPayload = useRef(false);
 
   const loadDashboard = useCallback(async (manual = false) => {
@@ -152,6 +166,8 @@ export default function DashboardClient() {
     return () => window.clearInterval(timer);
   }, [loadDashboard]);
 
+  const activeMerchantId = payload?.workspaces[0]?.id;
+
   const activeWorkspace = payload?.workspaces[0];
   const workspaceLabel = payload?.workspaces.length === 1
     ? activeWorkspace?.name
@@ -179,8 +195,14 @@ export default function DashboardClient() {
     setProfileMessage("");
     setProfileError("");
     try {
-      const { error: updateError } = await createClient().auth.updateUser({ data: { full_name: profileName.trim() } });
-      if (updateError) throw updateError;
+      const response = await fetch("/api/account/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: profileName.trim() }),
+      });
+      const result = await response.json() as { success: boolean; error?: { message: string } };
+      if (!response.ok || !result.success) throw new Error(result.error?.message ?? "Não foi possível actualizar o perfil.");
       setProfileMessage("O nome da conta foi actualizado.");
       setPayload((current) => current ? { ...current, user: { ...current.user, name: profileName.trim() } } : current);
       router.refresh();
@@ -190,6 +212,140 @@ export default function DashboardClient() {
       setProfileSaving(false);
     }
   }
+
+  async function createWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWorkspaceBusy(true);
+    setWorkspaceError("");
+    try {
+      const response = await fetch("/api/v1/merchants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: workspaceName.trim() }),
+      });
+      const result = await response.json() as { success: boolean; error?: { message: string } };
+      if (!response.ok || !result.success) throw new Error(result.error?.message ?? "Não foi possível criar o espaço de trabalho.");
+      setWorkspaceName("");
+      await loadDashboard(true);
+    } catch (cause) {
+      setWorkspaceError(cause instanceof Error ? cause.message : "Erro ao criar o espaço de trabalho.");
+    } finally {
+      setWorkspaceBusy(false);
+    }
+  }
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordBusy(true);
+    setPasswordMessage("");
+    setPasswordError("");
+    try {
+      const response = await fetch("/api/account/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          currentPassword: passwordForm.current,
+          newPassword: passwordForm.next,
+          confirmPassword: passwordForm.confirm,
+        }),
+      });
+      const result = await response.json() as { success: boolean; error?: { code?: string; message: string } };
+      if (!response.ok || !result.success) throw new Error(result.error?.message ?? "Não foi possível alterar a palavra-passe.");
+      setPasswordForm({ current: "", next: "", confirm: "" });
+      setPasswordMessage("Palavra-passe alterada com sucesso.");
+    } catch (cause) {
+      setPasswordError(cause instanceof Error ? cause.message : "Erro ao alterar a palavra-passe.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
+  const loadApiKeys = useCallback(async (merchantId: string) => {
+    setApiKeyError("");
+    try {
+      const response = await fetch(`/api/v1/api-keys?merchantId=${encodeURIComponent(merchantId)}`, { credentials: "include", cache: "no-store" });
+      const result = await response.json() as { success: boolean; data?: ApiKeyRow[]; error?: { message: string } };
+      if (!response.ok || !result.success) throw new Error(result.error?.message ?? "Não foi possível listar as chaves.");
+      setApiKeys(result.data ?? []);
+    } catch (cause) {
+      setApiKeyError(cause instanceof Error ? cause.message : "Erro ao listar as chaves.");
+    }
+  }, []);
+
+  async function createApiKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeMerchantId) return;
+    setApiKeyBusy(true);
+    setApiKeyError("");
+    setApiKeyNotice("");
+    setApiKeySecret(null);
+    try {
+      const response = await fetch("/api/v1/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ merchantId: activeMerchantId, name: apiKeyName.trim() || "Chave de teste", environment: "TEST" }),
+      });
+      const result = await response.json() as { success: boolean; api_key?: { key: string }; error?: { message: string } };
+      if (!response.ok || !result.success) throw new Error(result.error?.message ?? "Não foi possível criar a chave.");
+      setApiKeySecret(result.api_key?.key ?? null);
+      setApiKeyName("");
+      setApiKeyNotice("Chave criada. Copie-a agora: não volta a ser mostrada.");
+      await loadApiKeys(activeMerchantId);
+    } catch (cause) {
+      setApiKeyError(cause instanceof Error ? cause.message : "Erro ao criar a chave.");
+    } finally {
+      setApiKeyBusy(false);
+    }
+  }
+
+  async function revokeApiKey(id: string) {
+    if (!activeMerchantId) return;
+    setApiKeyBusy(true);
+    setApiKeyError("");
+    try {
+      const response = await fetch(`/api/v1/api-keys/${id}`, { method: "DELETE", credentials: "include" });
+      const result = await response.json() as { success: boolean; error?: { message: string } };
+      if (!response.ok || !result.success) throw new Error(result.error?.message ?? "Não foi possível revogar a chave.");
+      await loadApiKeys(activeMerchantId);
+    } catch (cause) {
+      setApiKeyError(cause instanceof Error ? cause.message : "Erro ao revogar a chave.");
+    } finally {
+      setApiKeyBusy(false);
+    }
+  }
+
+  async function markNotificationsRead() {
+    try {
+      await fetch("/api/notifications", { method: "POST", credentials: "include" });
+      setPayload((current) => current ? {
+        ...current,
+        notificationsUnread: 0,
+        notifications: current.notifications.map((item) => ({ ...item, read: true })),
+      } : current);
+    } catch {
+      // O próximo ciclo de actualização volta a tentar.
+    }
+  }
+
+  async function markNotificationRead(id: string) {
+    setPayload((current) => current ? {
+      ...current,
+      notificationsUnread: Math.max(0, current.notificationsUnread - 1),
+      notifications: current.notifications.map((item) => (item.id === id ? { ...item, read: true } : item)),
+    } : current);
+    try {
+      await fetch(`/api/notifications/${id}/read`, { method: "POST", credentials: "include" });
+    } catch {
+      // Ignora; o estado volta a ser sincronizado na próxima consulta.
+    }
+  }
+
+  useEffect(() => {
+    if (view === "integrations" && activeMerchantId) void loadApiKeys(activeMerchantId);
+  }, [view, activeMerchantId, loadApiKeys]);
 
   function exportTransactions() {
     if (!payload) return;
@@ -239,7 +395,7 @@ export default function DashboardClient() {
   function renderContent() {
     if (loadState === "loading" && !payload) return <div className="np-stats-grid" aria-label="A carregar o dashboard" data-testid="dashboard-loading">{[1, 2, 3, 4].map((n) => <div className="np-stat-card" key={n}><div className="np-skeleton" style={{ height: 12, width: "55%" }} /><div className="np-skeleton" style={{ height: 25, width: "75%", marginTop: 18 }} /><div className="np-skeleton" style={{ height: 9, width: "60%", marginTop: 12 }} /></div>)}</div>;
     if (loadState === "error" && !payload) return <section className="np-panel"><EmptyPanel title="Não foi possível carregar o dashboard" detail={error} icon={AlertCircle} /><div style={{ textAlign: "center", paddingBottom: 22 }}><button className="np-primary-button" type="button" onClick={() => void loadDashboard(true)} disabled={refreshing}><RefreshCw size={14} /> Tentar novamente</button></div></section>;
-    if (noWorkspace) return <section className="np-panel"><EmptyPanel title="Ligue um espaço de trabalho" detail="A sua conta ainda não tem espaços de comerciante associados. Quando um espaço for ligado, os saldos e a actividade serão apresentados aqui." icon={Wallet} /></section>;
+    if (noWorkspace) return <section className="np-panel"><EmptyPanel title="Crie o seu espaço de trabalho" detail="A sua conta ainda não tem espaços de comerciante. Crie um para começar a registar pagamentos e gerar chaves de API." icon={Wallet} /><form className="np-form" style={{ padding: "0 24px 24px", maxWidth: 420, margin: "0 auto" }} onSubmit={createWorkspace}><div className="np-field"><label htmlFor="workspace-name">Nome do espaço</label><input id="workspace-name" data-testid="workspace-name" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} minLength={2} maxLength={120} required placeholder="Ex.: A minha loja" /></div>{workspaceError && <p className="np-alert np-alert-error" role="alert"><AlertCircle size={15} />{workspaceError}</p>}<button className="np-primary-button" type="submit" disabled={workspaceBusy || workspaceName.trim().length < 2} data-testid="create-workspace">{workspaceBusy ? <LoaderCircle size={14} className="np-spin" /> : <Check size={14} />} Criar espaço de trabalho</button></form></section>;
     if (loadState === "error" && payload) return <section className="np-panel"><EmptyPanel title="Dados temporariamente indisponíveis" detail={error} icon={AlertCircle} /><div style={{ textAlign: "center", paddingBottom: 22 }}><button className="np-primary-button" type="button" onClick={() => void loadDashboard(true)} disabled={refreshing}><RefreshCw size={14} /> Tentar novamente</button></div></section>;
     if (!payload) return null;
     if (view === "overview") return renderOverview();
@@ -253,8 +409,8 @@ export default function DashboardClient() {
       {filteredCustomers.length ? <div className="np-customer-grid">{filteredCustomers.map((customer, index) => <div key={customer.id} data-testid={`customer-card-${index}`}><CustomerCard customer={customer} /></div>)}</div> : <EmptyPanel title="Sem clientes para apresentar" detail={payload.customers.length ? "Não encontrámos clientes com estes termos." : "Os dados de cliente serão apresentados quando existirem pagamentos com contacto registado."} icon={Users} />}</div></section>;
     if (view === "methods") return <section className="np-section-layout"><div className="np-panel"><div className="np-panel-heading"><div><h2>Métodos de pagamento observados</h2><p>Dados agregados dos pagamentos actualmente registados.</p></div></div>{payload.methods.length ? <div className="np-method-grid">{payload.methods.map((method) => <MethodCard key={`${method.provider}:${method.currency}`} method={method} />)}</div> : <EmptyPanel title="Ainda sem métodos registados" detail="M-Pesa, e-Mola ou métodos bancários surgirão nesta página apenas quando estiverem presentes nos dados de pagamento." icon={CreditCard} />}</div></section>;
     if (view === "reports") return <section className="np-section-layout"><div className="np-panel"><div className="np-panel-heading"><div><h2>Relatório de recebimentos</h2><p>Resumo mensal baseado nos pagamentos concluídos em MZN.</p></div><button className="np-primary-button" type="button" onClick={exportTransactions}><Download size={14} /> Exportar transacções</button></div><Chart points={payload.chart} /><div className="np-bars">{payload.chart.map((point) => { const maximum = Math.max(...payload.chart.map((item) => Number(item.received)), 1); const amount = Number(point.received); const height = Number.isFinite(amount) ? Math.max(3, amount / maximum * 105) : 3; return <div className="np-bar-group" key={point.month}><span className="np-bar-value">{currencyFormat(point.received)}</span><div className="np-bar" style={{ height }} /><span className="np-bar-label">{point.label}</span></div>; })}</div></div><div className="np-stats-grid"><MiniMetric title="Total recebido" value={currencyFormat(payload.summary.receivedTotal)} icon={ArrowDownLeft} /><MiniMetric title="Concluídas" value={payload.summary.completedTransactions.toLocaleString("pt-MZ")} icon={Check} /><MiniMetric title="Pendentes" value={payload.summary.pendingTransactions.toLocaleString("pt-MZ")} icon={Clock3} /><MiniMetric title="Total de transacções" value={payload.summary.totalTransactions.toLocaleString("pt-MZ")} icon={ArrowLeftRight} /></div></section>;
-    if (view === "integrations") return <section className="np-section-layout"><div className="np-integration-banner"><span className="np-integration-banner-icon"><ShieldCheck size={21} /></span><div><h2>Acompanhamento não é processamento</h2><p>Este dashboard apresenta registos de pagamentos existentes. O processamento de pagamentos por M-Pesa, e-Mola e bancos ainda não está configurado nesta aplicação. Não é possível cobrar pagamentos por aqui.</p></div></div><div className="np-panel"><div className="np-panel-heading"><div><h2>Estado por método</h2><p>Apenas métodos que constam dos dados devolvidos pela conta.</p></div></div>{payload.methods.length ? <div className="np-integration-list">{payload.methods.map((method) => <IntegrationCard method={method} key={`${method.provider}:${method.currency}`} />)}</div> : <EmptyPanel title="Sem métodos de pagamento detectados" detail="Quando houver registos de pagamentos associados a um provedor, o respectivo método será listado aqui." icon={Code2} />}</div><div className="np-alert np-alert-info"><ShieldCheck size={16} /> Não introduza credenciais de provedor nesta página. A ligação de processamento exige configuração técnica e credenciais oficiais fora do dashboard.</div></section>;
-    if (view === "settings") return <div className="np-settings-grid"><section className="np-panel"><div className="np-panel-heading"><div><h2>Perfil da conta</h2><p>Actualize o nome associado à sua conta autenticada.</p></div></div>{profileMessage && <p className="np-alert np-alert-success" role="status"><Check size={15} />{profileMessage}</p>}{profileError && <p className="np-alert np-alert-error" role="alert"><AlertCircle size={15} />{profileError}</p>}<form className="np-form" onSubmit={saveProfile}><div className="np-field"><label htmlFor="profile-name">Nome completo</label><input id="profile-name" data-testid="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} maxLength={120} placeholder="O seu nome" /></div><div className="np-field"><label htmlFor="profile-email">Email</label><input id="profile-email" value={payload.user.email} readOnly /><small>O email de autenticação não pode ser alterado aqui.</small></div><button className="np-primary-button" type="submit" disabled={profileSaving || !profileName.trim()}>{profileSaving ? <LoaderCircle size={14} className="np-spin" /> : <Check size={14} />} Guardar alterações</button></form></section><section className="np-panel"><div className="np-panel-heading"><div><h2>Espaços de trabalho</h2><p>Contas de comerciante ligadas ao seu utilizador.</p></div></div>{payload.workspaces.map((workspace) => <div className="np-workspace-card" key={workspace.id}><div><strong>{workspace.name}</strong><span>Identificador · {workspace.id}</span></div><span className="np-status-pill">{workspace.status === "ACTIVE" ? "Activo" : workspace.status === "PENDING" ? "Pendente" : "Suspenso"}</span></div>)}<div style={{ marginTop: 17 }}><LogoutButton /></div></section></div>;
+    if (view === "integrations") return <section className="np-section-layout"><div className="np-integration-banner"><span className="np-integration-banner-icon"><ShieldCheck size={21} /></span><div><h2>Acompanhamento não é processamento</h2><p>Este dashboard apresenta registos de pagamentos existentes. O processamento de pagamentos por M-Pesa, e-Mola e bancos ainda não está configurado nesta aplicação. Não é possível cobrar pagamentos por aqui.</p></div></div><div className="np-panel"><div className="np-panel-heading"><div><h2>Estado por método</h2><p>Apenas métodos que constam dos dados devolvidos pela conta.</p></div></div>{payload.methods.length ? <div className="np-integration-list">{payload.methods.map((method) => <IntegrationCard method={method} key={`${method.provider}:${method.currency}`} />)}</div> : <EmptyPanel title="Sem métodos de pagamento detectados" detail="Quando houver registos de pagamentos associados a um provedor, o respectivo método será listado aqui." icon={Code2} />}</div><div className="np-panel"><div className="np-panel-heading"><div><h2>Chaves de API</h2><p>Autenticam pedidos a /api/v1. Só o prefixo fica guardado; a chave completa é mostrada uma única vez.</p></div></div>{apiKeyError && <p className="np-alert np-alert-error" role="alert"><AlertCircle size={15} />{apiKeyError}</p>}{apiKeyNotice && <p className="np-alert np-alert-success" role="status"><Check size={15} />{apiKeyNotice}</p>}{apiKeySecret && <div className="np-alert np-alert-info"><Code2 size={15} /><span>Chave de teste: <code style={{ wordBreak: "break-all" }} data-testid="api-key-secret">{apiKeySecret}</code></span></div>}{activeMerchantId ? <><form className="np-form" onSubmit={createApiKey}><div className="np-field"><label htmlFor="api-key-name">Nome da chave</label><input id="api-key-name" value={apiKeyName} onChange={(event) => setApiKeyName(event.target.value)} maxLength={60} placeholder="Ex.: Integração loja online" /></div><button className="np-primary-button" type="submit" disabled={apiKeyBusy} data-testid="create-api-key">{apiKeyBusy ? <LoaderCircle size={14} className="np-spin" /> : <Check size={14} />} Gerar chave de teste</button></form>{apiKeys.length ? <div className="np-table-scroll" style={{ marginTop: 16 }}><table className="np-table"><thead><tr><th>Nome</th><th>Ambiente</th><th>Criada</th><th>Estado</th><th /></tr></thead><tbody>{apiKeys.map((key) => <tr key={key.id}><td>{key.name}</td><td>{key.environment}</td><td>{dateFormat(key.createdAt)}</td><td><span className={statusClass(key.active ? "COMPLETED" : "CANCELLED")}>{key.active ? "Activa" : "Revogada"}</span></td><td>{key.active && <button type="button" className="np-text-button" onClick={() => void revokeApiKey(key.id)} data-testid={`revoke-key-${key.id}`}>Revogar</button>}</td></tr>)}</tbody></table></div> : <div className="np-empty-inline">Ainda não existem chaves de API para este espaço.</div>}</> : <div className="np-empty-inline">Crie um espaço de trabalho para poder gerar chaves de API.</div>}</div><div className="np-alert np-alert-info"><ShieldCheck size={16} /> Não introduza credenciais de provedor nesta página. A ligação de processamento exige configuração técnica e credenciais oficiais fora do dashboard.</div></section>;
+    if (view === "settings") return <div className="np-settings-grid"><section className="np-panel"><div className="np-panel-heading"><div><h2>Perfil da conta</h2><p>Actualize o nome associado à sua conta autenticada.</p></div></div>{profileMessage && <p className="np-alert np-alert-success" role="status"><Check size={15} />{profileMessage}</p>}{profileError && <p className="np-alert np-alert-error" role="alert"><AlertCircle size={15} />{profileError}</p>}<form className="np-form" onSubmit={saveProfile}><div className="np-field"><label htmlFor="profile-name">Nome completo</label><input id="profile-name" data-testid="profile-name" value={profileName} onChange={(event) => setProfileName(event.target.value)} maxLength={120} placeholder="O seu nome" /></div><div className="np-field"><label htmlFor="profile-email">Email</label><input id="profile-email" value={payload.user.email} readOnly /><small>O email de autenticação não pode ser alterado aqui.</small></div><button className="np-primary-button" type="submit" disabled={profileSaving || !profileName.trim()}>{profileSaving ? <LoaderCircle size={14} className="np-spin" /> : <Check size={14} />} Guardar alterações</button></form></section><section className="np-panel"><div className="np-panel-heading"><div><h2>Espaços de trabalho</h2><p>Contas de comerciante ligadas ao seu utilizador.</p></div></div>{payload.workspaces.map((workspace) => <div className="np-workspace-card" key={workspace.id}><div><strong>{workspace.name}</strong><span>Identificador · {workspace.id}</span></div><span className="np-status-pill">{workspace.status === "ACTIVE" ? "Activo" : workspace.status === "PENDING" ? "Pendente" : "Suspenso"}</span></div>)}<div style={{ marginTop: 17 }}><LogoutButton /></div></section><section className="np-panel"><div className="np-panel-heading"><div><h2>Palavra-passe</h2><p>Altere a palavra-passe da conta autenticada. É pedida a palavra-passe actual.</p></div></div>{passwordMessage && <p className="np-alert np-alert-success" role="status"><Check size={15} />{passwordMessage}</p>}{passwordError && <p className="np-alert np-alert-error" role="alert"><AlertCircle size={15} />{passwordError}</p>}<form className="np-form" onSubmit={changePassword}><div className="np-field"><label htmlFor="current-password">Palavra-passe actual</label><input id="current-password" data-testid="current-password" type="password" autoComplete="current-password" value={passwordForm.current} onChange={(event) => setPasswordForm({ ...passwordForm, current: event.target.value })} required /></div><div className="np-field"><label htmlFor="new-password">Nova palavra-passe</label><input id="new-password" data-testid="new-password" type="password" autoComplete="new-password" minLength={8} value={passwordForm.next} onChange={(event) => setPasswordForm({ ...passwordForm, next: event.target.value })} required /><small>Mínimo de 8 caracteres.</small></div><div className="np-field"><label htmlFor="confirm-password">Confirmar nova palavra-passe</label><input id="confirm-password" data-testid="confirm-password" type="password" autoComplete="new-password" minLength={8} value={passwordForm.confirm} onChange={(event) => setPasswordForm({ ...passwordForm, confirm: event.target.value })} required /></div><button className="np-primary-button" type="submit" disabled={passwordBusy || !passwordForm.current || passwordForm.next.length < 8} data-testid="change-password">{passwordBusy ? <LoaderCircle size={14} className="np-spin" /> : <ShieldCheck size={14} />} Alterar palavra-passe</button></form></section></div>;
     return <section className="np-support-grid"><article className="np-panel np-support-card"><CircleHelp size={21} /><h2>Precisa de ajuda?</h2><p>Consulte os dados de transacções e métodos registados. Para questões de acesso à conta ou de configuração técnica, contacte o administrador da sua organização.</p></article><article className="np-panel np-support-card"><ShieldCheck size={21} /><h2>Dados e segurança</h2><p>O dashboard mostra dados associados aos seus espaços de comerciante ligados. Nunca partilhe palavras-passe ou credenciais de provedores por email.</p></article><article className="np-panel np-support-card"><Activity size={21} /><h2>Actualização dos dados</h2><p>Os dados são consultados ao abrir o dashboard e actualizados automaticamente a cada 30 segundos. Pode também actualizar manualmente.</p></article><article className="np-panel np-support-card"><Code2 size={21} /><h2>Integrações</h2><p>O processamento de pagamentos ainda não está configurado. Consulte a secção Integrações API para mais detalhes sobre as limitações actuais.</p></article></section>;
   }
 
@@ -273,13 +429,13 @@ export default function DashboardClient() {
       <div className="np-main">
         <header className="np-topbar">
           <div className="np-topbar-left"><span className="np-top-eyebrow">Painel do comerciante <span style={{ color: "#bcc9c4", padding: "0 5px" }}>/</span> {title}</span><div className="np-mobile-header"><span className="np-brand-mark"><Wallet size={16} /></span><span className="np-brand-name">nevon<span style={{ color: "var(--np-green)" }}>pay</span></span></div></div>
-          <div className="np-top-actions"><button type="button" className="np-icon-button" aria-label="Ver notificações" onClick={() => setNoticeOpen((open) => !open)} data-testid="notifications-button"><Bell size={16} />{Boolean(payload?.notifications.length) && <span className="np-notification-count" />}</button><button type="button" className="np-refresh-button" onClick={() => void loadDashboard(true)} disabled={refreshing} aria-label="Actualizar dashboard" data-testid="refresh-dashboard">{refreshing ? <LoaderCircle size={15} className="np-spin" /> : <RefreshCw size={15} />} Actualizar</button><div className="np-top-user"><span className="np-avatar">{initials(payload?.user.name || payload?.user.email)}</span><span><span className="np-user-name">{payload?.user.name || "Conta Nevon Pay"}</span><span className="np-user-email">{payload?.user.email}</span></span></div></div>
+          <div className="np-top-actions"><button type="button" className="np-icon-button" aria-label={payload?.notificationsUnread ? `Ver notificações (${payload.notificationsUnread} não lidas)` : "Ver notificações"} onClick={() => setNoticeOpen((open) => !open)} data-testid="notifications-button"><Bell size={16} />{Boolean(payload?.notificationsUnread) && <span className="np-notification-count" data-testid="notifications-badge" />}</button><button type="button" className="np-refresh-button" onClick={() => void loadDashboard(true)} disabled={refreshing} aria-label="Actualizar dashboard" data-testid="refresh-dashboard">{refreshing ? <LoaderCircle size={15} className="np-spin" /> : <RefreshCw size={15} />} Actualizar</button><div className="np-top-user"><span className="np-avatar">{initials(payload?.user.name || payload?.user.email)}</span><span><span className="np-user-name">{payload?.user.name || "Conta Nevon Pay"}</span><span className="np-user-email">{payload?.user.email}</span></span></div></div>
         </header>
         <nav className="np-mobile-nav" aria-label="Navegação móvel">{navigation.map(({ id, label, icon: Icon }) => <button type="button" key={id} className="np-nav-button" onClick={() => selectView(id)} aria-current={view === id ? "page" : undefined} data-testid={`mobile-nav-${id}`}><Icon size={14} />{label}</button>)}</nav>
         <div className="np-content">
            <div className="np-page-heading"><div><p className="np-overline">Nevon Pay · {workspaceLabel}</p><h1>{view === "overview" && payload?.user.name ? `Bom dia, ${payload.user.name.split(" ")[0]}` : title}</h1><p>{view === "overview" ? "Acompanhe o estado das suas cobranças e dos seus recebimentos." : sectionSubtitle(view)}</p></div><span className="np-updated" data-testid="last-updated">{lastUpdated ? `Actualizado ${dateFormat(lastUpdated, true)}` : "A obter dados…"}</span></div>
           {error && payload && loadState === "ready" && <div className="np-alert np-alert-error" role="alert"><AlertCircle size={16} />{error} Os valores apresentados correspondem à última consulta bem-sucedida.</div>}
-           {noticeOpen && <section className="np-panel" style={{ marginBottom: 15 }}><div className="np-panel-heading"><div><h2>Notificações</h2><p>Alertas gerados a partir dos pagamentos registados.</p></div><button type="button" className="np-icon-button" aria-label="Fechar notificações" data-testid="close-notifications" onClick={() => setNoticeOpen(false)}><X size={15} /></button></div>{payload?.notifications.length ? <div className="np-activity-list">{payload.notifications.map((item) => <article className="np-activity-row" key={item.id}><span className="np-activity-icon"><AlertCircle size={14} /></span><div><div className="np-activity-title">{item.title}</div><div className="np-activity-description">{item.description}</div><div className="np-activity-time">{dateFormat(item.createdAt, true)}</div></div></article>)}</div> : <div className="np-empty-inline">Não há notificações para apresentar.</div>}</section>}
+           {noticeOpen && <section className="np-panel" style={{ marginBottom: 15 }}><div className="np-panel-heading"><div><h2>Notificações</h2><p>{payload?.notificationsUnread ? `${payload.notificationsUnread} por ler · ` : ""}Alertas gerados pelas operações da sua conta. Actualizam a cada 30 segundos.</p></div><div style={{ display: "flex", gap: 8 }}>{Boolean(payload?.notificationsUnread) && <button type="button" className="np-text-button" onClick={() => void markNotificationsRead()} data-testid="mark-all-read">Marcar todas como lidas</button>}<button type="button" className="np-icon-button" aria-label="Fechar notificações" data-testid="close-notifications" onClick={() => setNoticeOpen(false)}><X size={15} /></button></div></div>{payload?.notifications.length ? <div className="np-activity-list">{payload.notifications.map((item) => <article className="np-activity-row" key={item.id} data-testid={`notification-${item.id}`} onClick={() => { if (!item.read) void markNotificationRead(item.id); }} style={{ cursor: item.read ? "default" : "pointer", opacity: item.read ? 0.72 : 1 }}><span className="np-activity-icon"><AlertCircle size={14} /></span><div><div className="np-activity-title">{item.title}{!item.read && <span className="np-notification-count" style={{ position: "static", display: "inline-block", marginLeft: 6, verticalAlign: "middle" }} />}</div><div className="np-activity-description">{item.description}</div><div className="np-activity-time">{dateFormat(item.createdAt, true)}{item.read ? " · lida" : " · não lida"}</div></div></article>)}</div> : <div className="np-empty-inline">Não há notificações para apresentar.</div>}{payload?.emailNotifications && <div className="np-alert np-alert-info" style={{ marginTop: 14 }}><Bell size={15} />{payload.emailNotifications.configured ? `Notificações por email activas (${payload.emailNotifications.status}).` : `Notificações por email ainda não configuradas: ${payload.emailNotifications.status}`}</div>}</section>}
           {renderContent()}
         </div>
       </div>

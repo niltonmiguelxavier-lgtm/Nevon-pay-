@@ -48,7 +48,8 @@ export type DashboardNotification = {
   title: string;
   description: string;
   createdAt: string;
-  severity: "attention";
+  severity: "info" | "attention" | "critical";
+  read: boolean;
 };
 
 export type DashboardPayload = {
@@ -74,5 +75,7 @@ export type DashboardPayload = {
   customers: DashboardCustomer[];
   methods: DashboardMethod[];
   notifications: DashboardNotification[];
+  notificationsUnread: number;
+  emailNotifications: { configured: boolean; status: string };
   updatedAt: string;
 };

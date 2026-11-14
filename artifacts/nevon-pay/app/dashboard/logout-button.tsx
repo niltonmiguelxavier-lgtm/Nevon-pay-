@@ -1,19 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-function getLoginPath() {
-  const pathname = window.location.pathname;
-  const dashboardIndex = pathname.lastIndexOf("/dashboard");
-  const basePath = dashboardIndex >= 0 ? pathname.slice(0, dashboardIndex) : "";
-  return `${basePath}/login`;
-}
-
+/**
+ * Logout: termina a sessão no browser e no servidor (rota /auth/logout), que
+ * limpa os cookies SSR. Antes só o cliente fazia `signOut()`, pelo que um
+ * refresh imediato podia reabrir o dashboard com a sessão ainda válida.
+ */
 export default function LogoutButton() {
+  const [busy, setBusy] = useState(false);
+
   async function signOut() {
-    await createClient().auth.signOut();
-    window.location.assign(getLoginPath());
+    setBusy(true);
+    try {
+      await createClient().auth.signOut();
+    } catch {
+      // A rota do servidor trata do resto mesmo que o cliente falhe.
+    } finally {
+      window.location.assign("/auth/logout");
+    }
   }
 
-  return <button className="auth-secondary" type="button" onClick={signOut}>Terminar sessão</button>;
+  return (
+    <button className="auth-secondary" type="button" onClick={signOut} disabled={busy} data-testid="logout-button">
+      {busy ? "A terminar sessão…" : "Terminar sessão"}
+    </button>
+  );
 }
