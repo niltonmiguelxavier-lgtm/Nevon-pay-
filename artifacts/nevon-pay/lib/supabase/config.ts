@@ -1,7 +1,2 @@
-export function getSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-  if (!url || !publishableKey) return null;
-  return { url, publishableKey };
-}
+// Mantido por compatibilidade: a resolução de configuração vive em lib/env.ts.
+export { getSupabaseConfig } from "@/lib/env";

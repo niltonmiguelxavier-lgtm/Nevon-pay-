@@ -1,0 +1,25 @@
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Variáveis de ambiente (nunca versionar credenciais)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Build
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs e temporários
+*.log
+.DS_Store
+coverage/
+
+# Ficheiros gerados pelo Vite/sandbox de mockups
+**/src/.generated/

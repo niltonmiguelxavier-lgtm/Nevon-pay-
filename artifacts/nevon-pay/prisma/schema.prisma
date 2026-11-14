@@ -48,6 +48,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   merchants MerchantUser[]
+  notifications Notification[]
 }
 
 model Merchant {
@@ -78,7 +79,7 @@ model ApiKey {
   id         String      @id @default(cuid())
   merchantId String
   name       String
-  keyHash    String
+  keyHash    String      @unique
   environment Environment @default(TEST)
   active     Boolean     @default(true)
   createdAt  DateTime    @default(now())
@@ -133,6 +134,7 @@ model CheckoutSession {
   id          String        @id @default(cuid())
   merchantId  String
   paymentId   String        @unique
+  cancelToken String?       @unique
   amount      Decimal       @db.Decimal(20, 4)
   currency    String
   status      PaymentStatus @default(OPEN)
@@ -157,6 +159,23 @@ model WebhookEvent {
   createdAt   DateTime @default(now())
   deliveredAt DateTime?
   @@index([merchantId, event])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  merchantId  String?
+  type        String
+  title       String
+  description String
+  severity    String    @default("info")
+  readAt      DateTime?
+  emailedAt   DateTime?
+  emailError  String?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
 }
 
 model AuditLog {
