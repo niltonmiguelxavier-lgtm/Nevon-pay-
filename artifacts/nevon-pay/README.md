@@ -31,7 +31,7 @@ Ver [`.env.example`](./.env.example). Resumo:
 | `NEXT_PUBLIC_SUPABASE_URL` | sim | URL do projeto Supabase. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | sim | Chave publicável (`sb_publishable_…`). A `service_role` **nunca** deve ser usada na aplicação. |
 | `NEXT_PUBLIC_APP_URL` | recomendado | Usado nos links de email e nos `checkout_url` devolvidos pela API. |
-| `EMAIL_PROVIDER` / `EMAIL_API_KEY` / `EMAIL_FROM` | não | Notificações por email (`resend`, `brevo` ou `webhook`). Sem estas variáveis as notificações ficam registadas na base de dados mas não são enviadas. |
+| `EMAIL_PROVIDER` / `EMAIL_API_KEY` / `EMAIL_FROM` | não | Notificações por email (`notifica`, `resend`, `brevo` ou `webhook`). Sem estas variáveis as notificações ficam registadas na base de dados mas não são enviadas. |
 
 `GET /api/health` devolve o estado real da base de dados, se o schema está aplicado,
 qual a variável de ligação em uso e se o email está configurado.
@@ -125,6 +125,33 @@ Persistidas na tabela `Notification` (criadas em `lib/notifications.ts`), com es
 leitura, contador de não lidas, `GET /api/notifications` e envio de email opcional.
 Sem `EMAIL_PROVIDER` configurado, o dashboard indica que o email não está activo e nenhuma
 notificação é marcada como enviada.
+
+### Email transacional — Notifica
+
+Fornecedor configurado: **Notifica** (`https://api.notifica.co.mz/api/v1/email/send`),
+plataforma moçambicana com SMS, email, WhatsApp e push.
+
+```env
+EMAIL_PROVIDER=notifica
+EMAIL_API_KEY=<service token do painel Notifica>
+EMAIL_FROM="notification@notifica.co.mz"
+EMAIL_ENDPOINT="https://api.notifica.co.mz/api/v1/email/send"   # opcional
+```
+
+Regras do adaptador (`lib/email.ts`):
+
+- o `from` **tem de ser um remetente verificado da conta** — liste-os em
+  `GET /api/v1/email/senders` (nesta conta: `noreply@`, `auth@`, `notification@`,
+  `developer@`, `alerts@`, `updates@`, `support@`, `billing@`, `api@`, `security@` — todos `@notifica.co.mz`);
+- a API aceita apenas texto simples no campo `body`; a Notifica injecta-o no próprio
+  template visual, por isso o HTML do Nevon Pay não é usado neste canal;
+- só devolvemos `sent: true` quando a resposta traz `success: true`; caso contrário a
+  notificação fica com o erro em `emailError` e `emailedAt` permanece nulo.
+
+> Nota: esta via serve as **notificações da aplicação** (pagamentos, checkout, conta).
+> O email de **confirmação de registo e recuperação de palavra-passe** é enviado pelo
+> próprio Supabase Auth e requer SMTP configurado no painel do Supabase — a Notifica
+> não expõe SMTP.
 
 ## Capítulos incluídos
 

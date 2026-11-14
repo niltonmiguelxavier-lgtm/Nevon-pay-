@@ -64,6 +64,34 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
       return { sent: true, provider: "brevo", id: body.messageId };
     }
 
+    if (config.provider === "notifica") {
+      // Notifica (api.notifica.co.mz): o corpo é texto simples — a plataforma
+      // injecta-o no seu próprio template visual. HTML não é usado.
+      const response = await fetch(config.endpoint || "https://api.notifica.co.mz/api/v1/email/send", {
+        method: "POST",
+        signal: timeout,
+        headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: message.to,
+          subject: message.subject,
+          body: message.text,
+          from: config.from,
+          type: "transactional",
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        success?: boolean;
+        message?: string;
+        data?: { id?: string; status?: string };
+        error?: { code?: string; message?: string };
+      };
+      if (!response.ok || body.success === false) {
+        const detalhe = body.error?.message || body.message || `HTTP ${response.status}`;
+        return { sent: false, provider: "notifica", error: detalhe };
+      }
+      return { sent: true, provider: "notifica", id: body.data?.id };
+    }
+
     // webhook: adaptador genérico para um serviço próprio de envio de email
     const response = await fetch(config.endpoint!, {
       method: "POST",

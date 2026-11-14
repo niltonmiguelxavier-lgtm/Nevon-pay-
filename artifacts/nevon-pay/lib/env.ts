@@ -86,7 +86,7 @@ export function getPublicAppUrl(): string {
 
 export type EmailConfig =
   | { enabled: false; reason: string }
-  | { enabled: true; provider: "resend" | "brevo" | "webhook"; apiKey: string; from: string; endpoint?: string };
+  | { enabled: true; provider: "resend" | "brevo" | "notifica" | "webhook"; apiKey: string; from: string; endpoint?: string };
 
 /**
  * Configuração de envio de email. Enquanto não estiver preenchida, as
@@ -103,13 +103,20 @@ export function getEmailConfig(): EmailConfig {
   if (!from) return { enabled: false, reason: "EMAIL_FROM não está definido." };
 
   if (provider === "resend" || provider === "brevo") return { enabled: true, provider, apiKey, from };
+
+  // Notifica (api.notifica.co.mz): usa remetentes verificados da plataforma.
+  if (provider === "notifica") {
+    const endpoint = (process.env.EMAIL_ENDPOINT || "https://api.notifica.co.mz/api/v1/email/send").trim();
+    return { enabled: true, provider, apiKey, from, endpoint };
+  }
+
   if (provider === "webhook") {
     const endpoint = (process.env.EMAIL_WEBHOOK_URL || "").trim();
     if (!endpoint) return { enabled: false, reason: "EMAIL_WEBHOOK_URL não está definido." };
     return { enabled: true, provider, apiKey, from, endpoint };
   }
 
-  return { enabled: false, reason: `EMAIL_PROVIDER "${provider}" não é suportado (use resend, brevo ou webhook).` };
+  return { enabled: false, reason: `EMAIL_PROVIDER "${provider}" não é suportado (use notifica, resend, brevo ou webhook).` };
 }
 
 export function getAppEnv() {
