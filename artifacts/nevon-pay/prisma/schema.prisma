@@ -7,16 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Os nomes físicos dos enums levam o prefixo app_ para não colidirem com os
+// enums herdados da base de dados de produção (UserRole, MerchantStatus e
+// PaymentStatus já existem em public com outro conjunto de valores).
 enum UserRole {
   USER
   MERCHANT
   ADMIN
+
+  @@map("app_user_role")
 }
 
 enum MerchantStatus {
   PENDING
   ACTIVE
   SUSPENDED
+
+  @@map("app_merchant_status")
 }
 
 enum PaymentStatus {
@@ -27,6 +34,8 @@ enum PaymentStatus {
   FAILED
   CANCELLED
   EXPIRED
+
+  @@map("app_payment_status")
 }
 
 enum Environment {
@@ -159,6 +168,8 @@ model WebhookEvent {
   createdAt   DateTime @default(now())
   deliveredAt DateTime?
   @@index([merchantId, event])
+  // Evita colisão com o enum herdado "WebhookEvent" que já existe em public.
+  @@map("app_webhook_events")
 }
 
 model Notification {

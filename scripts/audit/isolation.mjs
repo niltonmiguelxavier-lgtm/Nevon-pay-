@@ -39,7 +39,7 @@ async function api(method, path, { body, key } = {}) {
   return { status: response.status, body: await response.json().catch(() => ({})) };
 }
 
-const client = new Client({ connectionString: DB });
+const client = new Client({ connectionString: DB, ...(process.env.DB_SSL === "1" ? { ssl: { rejectUnauthorized: false } } : {}) });
 await client.connect();
 
 const stamp = Date.now();

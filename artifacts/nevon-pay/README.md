@@ -38,12 +38,39 @@ qual a variável de ligação em uso e se o email está configurado.
 
 ## Base de dados
 
-O schema Prisma está versionado em `prisma/migrations`. Projeto Supabase já preparado:
-`public.User`, `Merchant`, `MerchantUser`, `ApiKey`, `Wallet`, `LedgerEntry`, `Payment`,
-`CheckoutSession`, `WebhookEvent`, `AuditLog`, `Notification`.
+O schema Prisma está versionado em `prisma/migrations`
+(`20261114120000_init_app_schema`) e cria 11 tabelas:
+`User`, `Merchant`, `MerchantUser`, `ApiKey`, `Wallet`, `LedgerEntry`, `Payment`,
+`CheckoutSession`, `app_webhook_events`, `AuditLog`, `Notification`.
 
-Se o ambiente já tiver o schema aplicado (foi o caso do projeto Supabase existente),
-não corra `db:push` às cegas: use `prisma migrate status` para confirmar.
+### Coexistência com o schema herdado
+
+O projeto Supabase `mhrdefisamaflkpkqmiu` já continha 22 tabelas de outra aplicação
+(`users`, `merchants`, `payments`, `sessions`, `refunds`, …) e três enums com nomes
+que o Prisma também usa. Para não misturar os dois modelos:
+
+| Nome lógico | Nome físico | Motivo |
+|---|---|---|
+| enum `UserRole` | `app_user_role` | já existia `UserRole` com outros valores |
+| enum `MerchantStatus` | `app_merchant_status` | idem |
+| enum `PaymentStatus` | `app_payment_status` | idem |
+| model `WebhookEvent` | tabela `app_webhook_events` | já existia o enum `WebhookEvent` (tipos partilham o namespace) |
+
+As 22 tabelas herdadas **não são tocadas** por esta aplicação.
+
+### Ligação e migração
+
+1. Crie um role dedicado (não use o `postgres`): `nevon_app`, com
+   `GRANT USAGE, CREATE ON SCHEMA public` e privilégios nas tabelas.
+2. A `DATABASE_URL` usa o **Session pooler** com o formato
+   `postgresql://nevon_app.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`.
+3. Como a base não está vazia, o Prisma recusa `migrate deploy` (erro **P3005**).
+   Aplicar o SQL da migração e depois marcar como aplicada:
+   ```bash
+   psql "$DATABASE_URL" -f prisma/migrations/20261114120000_init_app_schema/migration.sql
+   pnpm exec prisma migrate resolve --applied 20261114120000_init_app_schema
+   pnpm db:status   # deve dizer "Database schema is up to date!"
+   ```
 
 ## Autenticação
 

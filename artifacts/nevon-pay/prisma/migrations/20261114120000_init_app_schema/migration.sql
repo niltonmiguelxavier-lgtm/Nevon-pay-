@@ -1,14 +1,12 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateEnum
-CREATE TYPE "UserRole" AS ENUM ('USER', 'MERCHANT', 'ADMIN');
+CREATE TYPE "app_user_role" AS ENUM ('USER', 'MERCHANT', 'ADMIN');
 
 -- CreateEnum
-CREATE TYPE "MerchantStatus" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED');
+CREATE TYPE "app_merchant_status" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED');
 
 -- CreateEnum
-CREATE TYPE "PaymentStatus" AS ENUM ('OPEN', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED', 'EXPIRED');
+CREATE TYPE "app_payment_status" AS ENUM ('OPEN', 'PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED', 'EXPIRED');
 
 -- CreateEnum
 CREATE TYPE "Environment" AS ENUM ('TEST', 'LIVE');
@@ -22,7 +20,7 @@ CREATE TABLE "User" (
     "email" TEXT NOT NULL,
     "name" TEXT,
     "password" TEXT,
-    "role" "UserRole" NOT NULL DEFAULT 'USER',
+    "role" "app_user_role" NOT NULL DEFAULT 'USER',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -34,7 +32,7 @@ CREATE TABLE "Merchant" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "status" "MerchantStatus" NOT NULL DEFAULT 'PENDING',
+    "status" "app_merchant_status" NOT NULL DEFAULT 'PENDING',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -96,7 +94,7 @@ CREATE TABLE "Payment" (
     "merchantId" TEXT NOT NULL,
     "amount" DECIMAL(20,4) NOT NULL,
     "currency" TEXT NOT NULL,
-    "status" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
+    "status" "app_payment_status" NOT NULL DEFAULT 'PENDING',
     "reference" TEXT NOT NULL,
     "provider" TEXT,
     "providerRef" TEXT,
@@ -116,7 +114,7 @@ CREATE TABLE "CheckoutSession" (
     "cancelToken" TEXT,
     "amount" DECIMAL(20,4) NOT NULL,
     "currency" TEXT NOT NULL,
-    "status" "PaymentStatus" NOT NULL DEFAULT 'OPEN',
+    "status" "app_payment_status" NOT NULL DEFAULT 'OPEN',
     "customer" JSONB,
     "metadata" JSONB,
     "successUrl" TEXT,
@@ -128,7 +126,7 @@ CREATE TABLE "CheckoutSession" (
 );
 
 -- CreateTable
-CREATE TABLE "WebhookEvent" (
+CREATE TABLE "app_webhook_events" (
     "id" TEXT NOT NULL,
     "merchantId" TEXT NOT NULL,
     "event" TEXT NOT NULL,
@@ -138,7 +136,7 @@ CREATE TABLE "WebhookEvent" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "deliveredAt" TIMESTAMP(3),
 
-    CONSTRAINT "WebhookEvent_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "app_webhook_events_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -207,7 +205,7 @@ CREATE UNIQUE INDEX "CheckoutSession_cancelToken_key" ON "CheckoutSession"("canc
 CREATE INDEX "CheckoutSession_merchantId_status_idx" ON "CheckoutSession"("merchantId", "status");
 
 -- CreateIndex
-CREATE INDEX "WebhookEvent_merchantId_event_idx" ON "WebhookEvent"("merchantId", "event");
+CREATE INDEX "app_webhook_events_merchantId_event_idx" ON "app_webhook_events"("merchantId", "event");
 
 -- CreateIndex
 CREATE INDEX "Notification_userId_readAt_idx" ON "Notification"("userId", "readAt");
