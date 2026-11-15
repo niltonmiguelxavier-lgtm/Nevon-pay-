@@ -26,6 +26,8 @@ export default function LoginForm({ configured, initialEmail = "", initialError 
   const [name, setName] = useState("");
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialMessage);
   const [error, setError] = useState(initialError);
@@ -46,6 +48,11 @@ export default function LoginForm({ configured, initialEmail = "", initialError 
     if (!configured) {
       setError("A ligação ao Supabase ainda não está configurada.");
       return;
+    }
+    if (mode === "signup") {
+      if (name.trim().length < 2) { setError("Indique o seu nome completo (pelo menos 2 caracteres)."); return; }
+      if (password.length < 8) { setError("A palavra-passe deve ter pelo menos 8 caracteres."); return; }
+      if (password !== confirmPassword) { setError("As palavras-passe não coincidem."); return; }
     }
 
     setBusy(true);
@@ -142,7 +149,7 @@ export default function LoginForm({ configured, initialEmail = "", initialError 
           <form onSubmit={handleSubmit} noValidate>
             {mode === "signup" && (
               <>
-                <label className="auth-label" htmlFor="name">Nome (opcional)</label>
+                <label className="auth-label" htmlFor="name">Nome completo</label>
                 <input
                   className="auth-input"
                   id="name"
@@ -150,6 +157,7 @@ export default function LoginForm({ configured, initialEmail = "", initialError 
                   type="text"
                   autoComplete="name"
                   maxLength={120}
+                  required
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
@@ -173,17 +181,24 @@ export default function LoginForm({ configured, initialEmail = "", initialError 
               className="auth-input"
               id="password"
               name="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               minLength={8}
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
+            <button type="button" className="auth-switch-button" onClick={() => setShowPassword(!showPassword)} aria-pressed={showPassword} style={{ marginTop: 8 }}>
+              {showPassword ? "Ocultar palavra-passe" : "Mostrar palavra-passe"}
+            </button>
             {mode === "signup" && (
-              <p className="auth-description" style={{ margin: "6px 0 0", fontSize: 12 }}>
-                Mínimo de 8 caracteres.
-              </p>
+              <>
+                <p className="auth-description" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                  Use pelo menos 8 caracteres. A confirmação da conta será enviada para este email.
+                </p>
+                <label className="auth-label" htmlFor="confirm-password">Confirmar palavra-passe</label>
+                <input className="auth-input" id="confirm-password" name="confirm-password" type={showPassword ? "text" : "password"} autoComplete="new-password" minLength={8} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+              </>
             )}
 
             {error && <p className="auth-error" role="alert">{error}</p>}
