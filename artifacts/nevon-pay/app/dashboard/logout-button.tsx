@@ -23,7 +23,7 @@ export default function LogoutButton() {
   }
 
   return (
-    <button className="auth-secondary" type="button" onClick={signOut} disabled={busy} data-testid="logout-button">
+    <button className="auth-secondary" style={{ whiteSpace: "nowrap", minHeight: 36, padding: "0 11px", fontSize: 12 }} type="button" onClick={signOut} disabled={busy} data-testid="logout-button">
       {busy ? "A terminar sessão…" : "Terminar sessão"}
     </button>
   );
