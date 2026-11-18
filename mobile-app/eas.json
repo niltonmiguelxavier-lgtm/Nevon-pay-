@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 14.0.0"
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -11,10 +12,23 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://nevon-pay.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://mhrdefisamaflkpkqmiu.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_6QSfMC83pLUIvVapG3KTXA_830_E_hT"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://nevon-pay.vercel.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://mhrdefisamaflkpkqmiu.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_6QSfMC83pLUIvVapG3KTXA_830_E_hT"
+      }
     }
   },
   "submit": {
