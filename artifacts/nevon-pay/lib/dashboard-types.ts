@@ -1,3 +1,5 @@
+import type { PlatformCapabilities } from "./capabilities";
+
 export type DashboardPaymentStatus =
   | "OPEN"
   | "PENDING"
@@ -77,5 +79,6 @@ export type DashboardPayload = {
   notifications: DashboardNotification[];
   notificationsUnread: number;
   emailNotifications: { configured: boolean; status: string };
+  capabilities: PlatformCapabilities;
   updatedAt: string;
 };

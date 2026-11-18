@@ -10,6 +10,25 @@ export type ApiErrorBody = {
 
 export type ApiSuccessBody<T> = { success: true; request_id: string } & T;
 
+export function mobileCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, X-Request-ID, Idempotency-Key, X-API-Key",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+  };
+}
+
+export function corsPreflight(methods = "GET, POST, PATCH, DELETE, OPTIONS") {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      ...mobileCorsHeaders(),
+      "Access-Control-Allow-Methods": methods,
+      Allow: methods,
+    },
+  });
+}
+
 /**
  * Resposta JSON uniforme. Mantém o formato `{ success, ... , request_id }`
  * usado pela aplicação, mas sem a lógica anterior que inferia `success`
@@ -25,6 +44,7 @@ export function json(data: Record<string, unknown>, status = 200, reqIdent?: str
       headers: {
         "X-Request-ID": request_id,
         "Cache-Control": "no-store",
+        ...mobileCorsHeaders(),
       },
     }
   );

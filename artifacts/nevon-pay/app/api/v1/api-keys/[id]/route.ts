@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { json, requestId } from "@/lib/http";
+import { corsPreflight, json, requestId } from "@/lib/http";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { handleApiError } from "@/lib/api/errors";
 
@@ -7,7 +7,7 @@ import { handleApiError } from "@/lib/api/errors";
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const rid = requestId(req);
   try {
-    const { supabase } = await requireAuthenticatedUser();
+    const { supabase } = await requireAuthenticatedUser(req);
     const { id } = await params;
 
     const key = await db.apiKey.findUnique({ where: { id }, select: { id: true, merchantId: true } });
@@ -42,4 +42,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
     return handleApiError(error, rid);
   }
+}
+
+export function OPTIONS() {
+  return corsPreflight("DELETE, OPTIONS");
 }

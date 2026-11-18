@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { json, requestId } from "@/lib/http";
+import { corsPreflight, json, requestId } from "@/lib/http";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { authErrorMessage } from "@/lib/auth/errors";
 import { handleApiError } from "@/lib/api/errors";
@@ -20,7 +20,7 @@ const schema = z.object({
 export async function GET(req: Request) {
   const rid = requestId(req);
   try {
-    const { supabase } = await requireAuthenticatedUser();
+    const { supabase } = await requireAuthenticatedUser(req);
     const links = await db.merchantUser.findMany({
       where: { userId: supabase.id },
       orderBy: { createdAt: "asc" },
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const rid = requestId(req);
   try {
-    const { supabase } = await requireAuthenticatedUser();
+    const { supabase } = await requireAuthenticatedUser(req);
     const input = schema.parse(await req.json());
 
     const profile = await syncSupabaseUser(supabase);
@@ -104,4 +104,8 @@ export async function POST(req: Request) {
     }
     return handleApiError(error, rid);
   }
+}
+
+export function OPTIONS() {
+  return corsPreflight("GET, POST, OPTIONS");
 }

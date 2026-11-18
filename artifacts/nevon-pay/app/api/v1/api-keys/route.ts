@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { json, requestId } from "@/lib/http";
+import { corsPreflight, json, requestId } from "@/lib/http";
 import { requireAuthenticatedUser } from "@/lib/auth/session";
 import { generateApiKey, hashSecret } from "@/lib/security";
 import { handleApiError } from "@/lib/api/errors";
@@ -21,7 +21,7 @@ async function assertOwnership(userId: string, merchantId: string) {
 export async function GET(req: Request) {
   const rid = requestId(req);
   try {
-    const { supabase } = await requireAuthenticatedUser();
+    const { supabase } = await requireAuthenticatedUser(req);
     const merchantId = new URL(req.url).searchParams.get("merchantId");
     if (!merchantId) {
       return json({ success: false, error: { code: "MERCHANT_REQUIRED", message: "Indique merchantId." } }, 400, rid);
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const rid = requestId(req);
   try {
-    const { supabase } = await requireAuthenticatedUser();
+    const { supabase } = await requireAuthenticatedUser(req);
     const limit = rateLimit(clientKey(req, "apikeys.create"), { max: 10, windowSeconds: 60 });
     if (!limit.allowed) {
       return json(
@@ -98,4 +98,8 @@ export async function POST(req: Request) {
     }
     return handleApiError(error, rid);
   }
+}
+
+export function OPTIONS() {
+  return corsPreflight("GET, POST, OPTIONS");
 }

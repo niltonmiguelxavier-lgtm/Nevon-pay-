@@ -1,11 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { json, requestId } from "@/lib/http";
-import { createClient } from "@/lib/supabase/server";
+import { corsPreflight, json, requestId } from "@/lib/http";
+import { getAuthenticatedAuthContext } from "@/lib/auth/session";
 import { getEmailConfig, getSupabaseConfig } from "@/lib/env";
 import { syncSupabaseUser } from "@/lib/auth/sync-user";
 import { countUnread, listNotifications } from "@/lib/notifications";
 import { expireStaleSessions } from "@/lib/payments";
+import { getPlatformCapabilities } from "@/lib/capabilities";
 import type {
   DashboardChartPoint,
   DashboardCustomer,
@@ -84,9 +85,9 @@ export async function GET(req: Request) {
   }
 
   try {
-    const supabase = await createClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) {
+    const authContext = await getAuthenticatedAuthContext(req);
+    const user = authContext?.supabase ?? null;
+    if (!user) {
       return json({
         success: false,
         error: {
@@ -123,8 +124,19 @@ export async function GET(req: Request) {
     const workspaces = links
       .map(({ merchant }) => merchant)
       .filter((merchant, index, all) => all.findIndex((item) => item.id === merchant.id) === index);
-    const merchantIds = workspaces.map(({ id: merchantId }) => merchantId);
+    const requestedMerchantId = new URL(req.url).searchParams.get("merchantId")?.trim() || null;
+    if (requestedMerchantId && !workspaces.some((workspace) => workspace.id === requestedMerchantId)) {
+      return json({
+        success: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Sem acesso a este espaço de trabalho.",
+        },
+      }, 403, id);
+    }
+    const merchantIds = requestedMerchantId ? [requestedMerchantId] : workspaces.map(({ id: merchantId }) => merchantId);
     const now = new Date();
+    const capabilities = getPlatformCapabilities();
 
     // Sessões vencidas passam a EXPIRED também fora do endpoint de checkout.
     if (merchantIds.length > 0) {
@@ -158,6 +170,7 @@ export async function GET(req: Request) {
       emailNotifications: getEmailConfig().enabled
         ? { configured: true, status: "Provedor de email activo" }
         : { configured: false, status: (getEmailConfig() as { reason?: string }).reason ?? "Não configurado" },
+      capabilities,
       updatedAt: now.toISOString(),
     };
 
@@ -364,4 +377,8 @@ export async function GET(req: Request) {
       },
     }, 503, id);
   }
+}
+
+export function OPTIONS() {
+  return corsPreflight("GET, OPTIONS");
 }

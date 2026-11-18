@@ -1,5 +1,5 @@
-import { json, requestId } from "@/lib/http";
-import { createClient } from "@/lib/supabase/server";
+import { corsPreflight, json, requestId } from "@/lib/http";
+import { getAuthenticatedUser } from "@/lib/auth/session";
 import { markNotificationRead } from "@/lib/notifications";
 import { handleApiError } from "@/lib/api/errors";
 
@@ -7,14 +7,13 @@ import { handleApiError } from "@/lib/api/errors";
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const rid = requestId(req);
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) {
       return json({ success: false, error: { code: "UNAUTHENTICATED", message: "Inicie sessão." } }, 401, rid);
     }
 
     const { id } = await params;
-    const result = await markNotificationRead(data.user.id, id);
+    const result = await markNotificationRead(authUser.supabase.id, id);
     if (!result.ok) {
       return json({ success: false, error: { code: "NOT_FOUND", message: "Notificação não encontrada." } }, 404, rid);
     }
@@ -22,4 +21,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch (error) {
     return handleApiError(error, rid);
   }
+}
+
+export function OPTIONS() {
+  return corsPreflight("POST, OPTIONS");
 }

@@ -12,7 +12,7 @@ const schema = z.object({
   merchantId: z.string().min(1).optional(),
   amount: z.coerce.number().positive().max(1_000_000_000),
   currency: z.string().length(3).default("MZN"),
-  provider: z.enum(["sandbox", "mpesa", "emola"]).default("sandbox"),
+  provider: z.string().trim().min(1).max(60).default("sandbox"),
   reference: z.string().min(3).max(120).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -24,9 +24,11 @@ export async function POST(req: Request) {
     const input = schema.parse(await req.json());
     assertMerchantScope(auth, input.merchantId);
 
+    const requestedProvider = input.provider.toLowerCase();
+
     // Em chaves LIVE não simulamos pagamentos: sem provedor real configurado,
     // recusamos em vez de marcar operações fictícias como pagas.
-    if (auth.environment === "LIVE" && input.provider === "sandbox") {
+    if (auth.environment === "LIVE" && requestedProvider === "sandbox") {
       return json(
         {
           success: false,
@@ -53,7 +55,20 @@ export async function POST(req: Request) {
       }
     }
 
-    const provider = getProvider(input.provider);
+    const provider = getProvider(requestedProvider);
+    if (!provider.descriptor.environments.includes(auth.environment)) {
+      return json(
+        {
+          success: false,
+          error: {
+            code: "PROVIDER_NOT_AVAILABLE_IN_ENVIRONMENT",
+            message: `O provedor "${provider.descriptor.displayName}" não está disponível para chaves ${auth.environment}.`,
+          },
+        },
+        503,
+        rid
+      );
+    }
     const reference = input.reference?.trim() || generateReference("PAY");
     const currency = input.currency.toUpperCase();
 

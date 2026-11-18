@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { json, requestId } from "@/lib/http";
-import { createClient } from "@/lib/supabase/server";
+import { corsPreflight, json, requestId } from "@/lib/http";
+import { getAuthenticatedAuthContext } from "@/lib/auth/session";
 import { authErrorMessage } from "@/lib/auth/errors";
 import { handleApiError } from "@/lib/api/errors";
 import { db } from "@/lib/db";
@@ -25,10 +25,8 @@ const schema = z
   });
 
 /**
- * Alteração de palavra-passe autenticada.
- * A palavra-passe actual é validada no servidor (reauth) antes da alteração —
- * sem isto, uma sessão sequestrada poderia trocar a palavra-passe sem saber a
- * antiga. As sessões começam a usar a nova palavra-passe imediatamente.
+ * Alteração de palavra-passe autenticada (cookies SSR ou token Bearer).
+ * A palavra-passe actual é validada no servidor (reauth) antes da alteração.
  */
 export async function POST(req: Request) {
   const rid = requestId(req);
@@ -42,9 +40,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user?.email) {
+    const authContext = await getAuthenticatedAuthContext(req);
+    if (!authContext || !authContext.supabase.email) {
       return json(
         { success: false, error: { code: "UNAUTHENTICATED", message: "Sessão inválida. Inicie sessão novamente." } },
         401,
@@ -54,8 +51,8 @@ export async function POST(req: Request) {
 
     const input = schema.parse(await req.json());
 
-    const { error: reauthError } = await supabase.auth.signInWithPassword({
-      email: userData.user.email,
+    const { data: reauthData, error: reauthError } = await authContext.client.auth.signInWithPassword({
+      email: authContext.supabase.email,
       password: input.currentPassword,
     });
     if (reauthError) {
@@ -66,18 +63,52 @@ export async function POST(req: Request) {
       );
     }
 
-    const { error: updateError } = await supabase.auth.updateUser({ password: input.newPassword });
-    if (updateError) {
-      const code = updateError.code === "same_password" ? "SAME_PASSWORD" : "PASSWORD_UPDATE_FAILED";
-      return json({ success: false, error: { code, message: authErrorMessage(updateError) } }, 400, rid);
+    if (authContext.bearerToken) {
+      const accessToken = reauthData.session?.access_token || authContext.bearerToken;
+      const response = await fetch(`${authContext.config.url}/auth/v1/user`, {
+        method: "PUT",
+        headers: {
+          apikey: authContext.config.publishableKey,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: input.newPassword }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error_code?: string;
+          code?: string;
+          msg?: string;
+          message?: string;
+        };
+        const rawCode = payload.error_code ?? payload.code;
+        const code = rawCode === "same_password" ? "SAME_PASSWORD" : "PASSWORD_UPDATE_FAILED";
+        return json(
+          {
+            success: false,
+            error: {
+              code,
+              message: authErrorMessage({ code: rawCode, message: payload.msg ?? payload.message }),
+            },
+          },
+          400,
+          rid
+        );
+      }
+    } else {
+      const { error: updateError } = await authContext.client.auth.updateUser({ password: input.newPassword });
+      if (updateError) {
+        const code = updateError.code === "same_password" ? "SAME_PASSWORD" : "PASSWORD_UPDATE_FAILED";
+        return json({ success: false, error: { code, message: authErrorMessage(updateError) } }, 400, rid);
+      }
     }
 
     await db.auditLog.create({
       data: {
-        actorId: userData.user.id,
+        actorId: authContext.supabase.id,
         action: "account.password_changed",
         resource: "User",
-        resourceId: userData.user.id,
+        resourceId: authContext.supabase.id,
         requestId: rid,
       },
     });
@@ -86,4 +117,8 @@ export async function POST(req: Request) {
   } catch (error) {
     return handleApiError(error, rid);
   }
+}
+
+export function OPTIONS() {
+  return corsPreflight("POST, OPTIONS");
 }
