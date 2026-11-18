@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Nevon Pay",
+    "slug": "nevon-pay",
+    "scheme": "nevonpay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f6f8f7"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "mz.nevonpay.merchant",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "mz.nevonpay.merchant",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#126e50"
+      }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}
