@@ -31,6 +31,12 @@
     "plugins": [
       "expo-secure-store",
       "expo-font"
-    ]
+    ],
+    "owner": "nevon-group",
+    "extra": {
+      "eas": {
+        "projectId": "9f38c964-2c52-4bc6-9103-fd4aa0cbf88f"
+      }
+    }
   }
 }
