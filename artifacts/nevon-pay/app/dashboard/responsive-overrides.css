@@ -1,0 +1,122 @@
+/* Responsive hardening: scoped to the existing dashboard, no visual redesign. */
+.np-dashboard {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+.np-shell,
+.np-main,
+.np-content,
+.np-topbar,
+.np-topbar-left,
+.np-top-actions,
+.np-panel,
+.np-main-grid > *,
+.np-bottom-grid > * {
+  min-width: 0;
+}
+.np-top-actions { flex: 0 1 auto; }
+.np-top-user-copy { min-width: 0; }
+.np-user-name,
+.np-user-email { display: block; max-width: 100%; overflow-wrap: anywhere; }
+.np-mobile-nav { min-width: 0; max-width: 100%; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+.np-mobile-nav .np-nav-button { flex: 0 0 auto; scroll-snap-align: start; }
+.np-table-scroll { max-width: 100%; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.np-chart-wrap { min-width: 0; max-width: 100%; overflow: hidden; }
+.np-chart-svg { display: block; overflow: hidden; }
+.np-chart-legend { flex-wrap: wrap; }
+.np-stat-value { overflow-wrap: anywhere; }
+.np-form, .np-field, .np-field input, .np-select, .np-search { min-width: 0; max-width: 100%; }
+
+/* 769–1024 px: keep the desktop sidebar while reducing the content pressure. */
+@media (min-width: 821px) and (max-width: 1024px) {
+  .np-shell { grid-template-columns: 204px minmax(0, 1fr); }
+  .np-sidebar { padding-inline: 12px; }
+  .np-main { padding-inline: 20px; }
+  .np-main-grid { grid-template-columns: minmax(0, 1.3fr) minmax(220px, .9fr); }
+  .np-bottom-grid { grid-template-columns: minmax(0, 1.2fr) minmax(220px, .8fr); }
+  .np-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 821–1024 px: retain sidebar, but use a compact header and balanced columns. */
+@media (min-width: 821px) and (max-width: 1024px) {
+  .np-top-eyebrow { display: none; }
+  .np-mobile-header { display: flex; align-items: center; gap: 8px; }
+  .np-mobile-header .np-brand-mark { width: 30px; height: 30px; }
+  .np-mobile-header .np-brand-name { font-size: 17px; }
+  .np-top-user-copy { max-width: 112px; }
+  .np-user-email { display: none; }
+  .np-user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .np-top-actions { gap: 7px; }
+}
+
+/* 561–820 px: retain a readable account label without squeezing the header. */
+@media (min-width: 561px) and (max-width: 820px) {
+  .np-top-user-copy { max-width: 112px; }
+  .np-user-email { display: none; }
+  .np-user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* 481–820 px: tablet and large phones use the existing compact navigation. */
+@media (min-width: 481px) and (max-width: 820px) {
+  .np-main { padding-inline: 20px; }
+  .np-topbar { gap: 10px; }
+  .np-top-actions { gap: 8px; }
+  .np-main-grid, .np-bottom-grid { grid-template-columns: minmax(0, 1fr); }
+  .np-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .np-method-grid, .np-integration-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .np-customer-grid, .np-support-grid, .np-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .np-table-head { flex-wrap: wrap; }
+}
+
+/* 376–480 px: two-column KPI cards; compact action controls prevent header collision. */
+@media (min-width: 376px) and (max-width: 560px) {
+  .np-topbar { gap: 7px; }
+  .np-topbar-left { flex: 0 0 auto; }
+  .np-top-actions { gap: 6px; }
+  .np-top-user { gap: 5px; padding-left: 6px; }
+  .np-top-user-copy { display: block; max-width: 78px; }
+  .np-user-name { font-size: 10px; line-height: 1.2; overflow-wrap: anywhere; }
+  .np-top-logout .np-logout-button { width: 36px; min-width: 36px; padding: 0 !important; justify-content: center; }
+  .np-top-logout .np-logout-button span { display: none; }
+  .np-top-logout .np-logout-button svg { flex: 0 0 auto; }
+  .np-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .np-method-grid, .np-integration-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .np-customer-grid, .np-support-grid, .np-settings-grid { grid-template-columns: 1fr; }
+  .np-panel-heading { flex-wrap: wrap; }
+}
+
+/* 320–375 px: single-column summary cards and icon-only header actions. */
+@media (max-width: 375px) {
+  .np-main { padding: 0 10px 24px; }
+  .np-topbar { min-height: 56px; gap: 5px; }
+  .np-topbar-left { flex: 0 0 auto; }
+  .np-mobile-header { gap: 6px; }
+  .np-mobile-header .np-brand-mark { width: 27px; height: 27px; }
+  .np-mobile-header .np-brand-name { font-size: 15px; }
+  .np-top-actions { gap: 3px; }
+  .np-top-actions > .np-icon-button,
+  .np-top-actions > .np-refresh-button,
+  .np-top-logout .np-logout-button { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0 !important; }
+  .np-top-actions > .np-refresh-button { font-size: 0; }
+  .np-top-user { gap: 4px; padding-left: 4px; }
+  .np-top-user-copy { display: block; max-width: 48px; }
+  .np-user-name { font-size: 9px; line-height: 1.15; overflow-wrap: anywhere; }
+  .np-user-email { display: none; }
+  .np-avatar { width: 27px; height: 27px; }
+  .np-top-logout .np-logout-button { justify-content: center; }
+  .np-top-logout .np-logout-button span { display: none; }
+  .np-stats-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .np-stat-card { min-height: 100px; }
+  .np-stat-value { font-size: clamp(16px, 5vw, 19px); }
+  .np-page-heading h1 { font-size: clamp(21px, 7vw, 25px); overflow-wrap: anywhere; }
+  .np-panel { padding: 13px; }
+  .np-table-panel { padding: 0; }
+  .np-chart-wrap { height: 170px; }
+  .np-chart-tooltip { right: 4px; top: 2px; max-width: 46%; overflow-wrap: anywhere; }
+  .np-method-grid, .np-integration-list, .np-customer-grid, .np-support-grid, .np-settings-grid { grid-template-columns: minmax(0, 1fr); }
+  .np-integration-banner { padding: 13px; gap: 10px; }
+  .np-workspace-card { align-items: flex-start; flex-wrap: wrap; }
+  .np-customer-meta { flex-wrap: wrap; gap: 8px; }
+  .np-page-heading > *, .np-panel-heading > * { min-width: 0; }
+}

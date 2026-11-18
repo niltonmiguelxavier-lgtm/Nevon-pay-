@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -23,8 +24,9 @@ export default function LogoutButton() {
   }
 
   return (
-    <button className="auth-secondary" style={{ whiteSpace: "nowrap", minHeight: 36, padding: "0 11px", fontSize: 12 }} type="button" onClick={signOut} disabled={busy} data-testid="logout-button">
-      {busy ? "A terminar sessão…" : "Terminar sessão"}
+    <button className="auth-secondary np-logout-button" style={{ whiteSpace: "nowrap", minHeight: 36, padding: "0 11px", fontSize: 12 }} type="button" onClick={signOut} disabled={busy} data-testid="logout-button" aria-label={busy ? "A terminar sessão" : "Terminar sessão"} title="Terminar sessão">
+      <LogOut size={15} aria-hidden="true" />
+      <span>{busy ? "A terminar sessão…" : "Terminar sessão"}</span>
     </button>
   );
 }
